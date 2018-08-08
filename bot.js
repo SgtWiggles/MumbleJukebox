@@ -176,20 +176,19 @@ var downloadVideo = {
 				if (!audioFormat)
 					throw 'Could not find an audio format to use!';
 
-				let filePath = './music/' + id + '.' + audioFormat.container;
+				var filePath = './music/' + id + '.' + audioFormat.container;
 				console.log('Downloading to: ' + filePath);
 
-				let video = ytdl.downloadFromInfo(info, {format : audioFormat});
+				var video = ytdl.downloadFromInfo(info, {format : audioFormat});
 				video.pipe(fs.createWriteStream(filePath));
 
 				video.on('end', () => {
 					console.log('Finished fetching song: ' + id + ', title ' + info.title);
-					songdb.set(id, {title : info.title, file : filePath}).write();
+					songdb.set(id, {title : info.title, file : filePath, who: user.name}).write();
 					queueSong(id);
 				});
 			});
-		}
-		else {
+		} else {
 			console.log('Song already downloaded: ' + id);
 			queueSong(id);
 		}
@@ -205,7 +204,7 @@ var pausePlayback = {
 		}
 		ffmpegCommand('SIGSTOP');
 	},
-	help : "Pauses the music playback.  (Only available when bot is run on *nix systems)"
+	help : "Pauses the music playback."
 };
 
 var playPlayback = {
@@ -220,14 +219,14 @@ var playPlayback = {
 			ffmpegCommand('SIGCONT');
 		}
 	},
-	help : "The bot resumes playing music. (Only available when bot is run on *nix systems)"
+	help : "The bot resumes playing music."
 };
 
 var replayPlayback = {
 	func : function(message, user, scope) {
 		playSong(currentSong);
 	},
-	help : "Replays the current song. (Only available when bot is run on *nix systems)"
+	help : "Replays the current song."
 };
 
 var nextSong = {
@@ -238,7 +237,7 @@ var nextSong = {
 		}
 		playSong(dequeSong());
 	},
-	help : "Skips the current song and plays the next song. (Only available when bot is run on *nix systems)"
+	help : "Skips the current song and plays the next song."
 };
 
 var quitCommand = {
@@ -249,16 +248,7 @@ var quitCommand = {
 	help : "Forces the bot to leave the server."
 };
 
-var commands = {
-	//'quit' : quitCommand,
-	'come' : {
-		func : function(message, user, scope) {
-			user.channel.join();
-		},
-		help : "The bot comes into the same channel as you."
-	},
-	'dl' : downloadVideo,
-	'vol' : {
+var volumeCommand = {
 		func : function(message, user, scope) {
 			if (message.length <= 1) {
 				user.channel.sendMessage("Current volume: " + (settings.volume * 100));
@@ -283,31 +273,98 @@ var commands = {
 			saveSettings();
 
 			console.log('Set volume to:', vol);
-		},
-		help : `Sets the volume of the bot. Usage: ${settings.commandPrefix}vol [0,100]`
 	},
-	'next' : nextSong,
-	'skip' : nextSong,
-	'n' : nextSong,
-	'stop' : pausePlayback,
-	'pause' : pausePlayback,
-	'play' : playPlayback,
-	'resume' : playPlayback,
-	'replay' : replayPlayback,
-	'restart' : replayPlayback,
-	'r' : replayPlayback,
-	'title' : {
+	help : `Sets the volume of the bot. Usage: ${settings.commandPrefix}vol [0,100]`
+}
+
+var titleCommand = {
 		func : function(message, user, scope) {
 			if (currentSong === undefined) {
 				user.channel.sendMessage('No song is currently being played. ' +
-																 'Use this command when a song being played');
-				return;
-			}
-			var title = songdb.get(currentSong).value().title;
-			user.channel.sendMessage(`Current song title: ${title}`);
-		},
-		help : "Gets the title of the song currently playing"
-	}
+																 'Use this command when a song is being played');
+			return;
+		}
+		var title = songdb.get(currentSong).value().title;
+		user.channel.sendMessage(`Current song title: ${title}`);
+	},
+	help : "Gets the title of the song currently playing"
+}
+
+var whoCommand = {
+	func : function(message, user, scope){
+		if(currentSong === undefined){
+			user.channel.sendMessage('No song is currently being played. ' 	+
+						 'Use this command when a song is being played');
+			return;
+		}
+
+		var who = songdb.get(currentSong).value().who;
+		if(who === undefined) who = "unknown";
+		user.channel.sendMessage(`Requester for the current song: ${who}`);
+	},
+	help : `Gets who requested the currently playing song.`
+}
+
+var comeCommand = {
+	func : function(message, user, scope) {
+		user.channel.join();
+	},
+	help : "The bot comes into the same channel as you."
+}
+
+var infoCommand= {
+	func : function(message, user, scope) {
+		if(currentSong === undefined) {
+			user.channel.sendMessage('No song is currently being played. ' 	+
+						 'Use this command when a song is being played');
+			return;
+		}
+
+		var msgString = ``;
+		var title = songdb.get(currentSong).value().title;
+		var who = songdb.get(currentSong).value().who;
+		if(who === undefined) who = "unknown";
+		user.channel.sendMessage(`<br/>Title: ${title}<br/>Requester: ${who}<br/>`);
+	},
+	help: "Gets information about the current song"
+}
+
+var removeCommand = {
+	func : function(message, user, scope){
+		if(currentSong === undefined) {
+			user.channel.sendMessage('No song is currently being played. ' 	+
+						 'Use this command when a song is being played');
+			return;
+		}
+		console.log(`Attempting to remove ${currentSong}`);
+		songdb.unset(currentSong).write();
+	},
+	help: "Removes the currently playing song from the playlist"
+}
+
+
+var commands = {
+	'come' : comeCommand,
+	'dl' : downloadVideo,
+	'vol' : volumeCommand,
+	'next' : nextSong,
+	'skip' : nextSong,
+	'n' : nextSong,
+
+	'stop' : pausePlayback,
+	'pause' : pausePlayback,
+
+	'play' : playPlayback,
+	'resume' : playPlayback,
+
+	'replay' : replayPlayback,
+	'restart' : replayPlayback,
+	'r' : replayPlayback,
+
+	'title' : titleCommand,
+	'who' : whoCommand,
+	'info' : infoCommand,
+	'remove' : removeCommand
 };
 
 console.log('Connecting');
@@ -371,12 +428,11 @@ var onMessage = function(message, user, scope) {
 		process.stdout.write('Command string: "' + strings[0] + '" -> ');
 		const object = commands[strings[0]];
 		if (object === undefined) {
-			process.stdout.write('Not found!');
+			process.stdout.write('Not found!\n');
 		} else {
-			process.stdout.write('Found!');
+			process.stdout.write('Found!\n');
 			object.func(strings, user, scope);
 		}
-		process.stdout.write('\n');
 	}
 	console.log('-----------------------------------------------------');
 };

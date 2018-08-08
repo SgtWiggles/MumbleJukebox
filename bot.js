@@ -39,12 +39,23 @@ const isWindows = (process.platform == 'win32');
 function getWindowsErrorString(command) {
 	return `Sorry, ${command} is not supported when the bot is hosted on Windows`;
 }
+String.prototype.toMMSS = function () {
+	var sec_num = parseInt(this, 10); 
+	var minutes = Math.floor(sec_num / 60);
+	var seconds = sec_num - (minutes * 60);
+	
+	if (seconds < 10) {seconds = "0" + seconds;}
+	
+	return '' + minutes + ':' + seconds;
+}
+
 
 var options = {};
 var audioStream = null;
 var ffmpegStream = null;
 
 var mumbleClient;
+
 
 const songSampleRate = 48000;
 const bufSize = 2;
@@ -154,8 +165,6 @@ var playSong = function(id) {
 
 var downloadVideo = {
 	func : function(message, user, scope) {
-		let fileExtension = '.m4a';
-
 		message.splice(0, 1);
 
 		if (!ytdl.validateURL(message[0])) {
@@ -183,8 +192,11 @@ var downloadVideo = {
 				video.pipe(fs.createWriteStream(filePath));
 
 				video.on('end', () => {
-					console.log('Finished fetching song: ' + id + ', title ' + info.title);
-					songdb.set(id, {title : info.title, file : filePath, who: user.name}).write();
+					var songLen = info.length_seconds.toMMSS()
+					console.log('Finished fetching song: ' + id + ', title ' + info.title + 
+							' |  Song len ' + songLen);
+	
+					songdb.set(id, {title : info.title, file : filePath, who: user.name, length: songLen}).write();
 					queueSong(id);
 				});
 			});
@@ -277,40 +289,13 @@ var volumeCommand = {
 	help : `Sets the volume of the bot. Usage: ${settings.commandPrefix}vol [0,100]`
 }
 
-var titleCommand = {
-		func : function(message, user, scope) {
-			if (currentSong === undefined) {
-				user.channel.sendMessage('No song is currently being played. ' +
-																 'Use this command when a song is being played');
-			return;
-		}
-		var title = songdb.get(currentSong).value().title;
-		user.channel.sendMessage(`Current song title: ${title}`);
-	},
-	help : "Gets the title of the song currently playing"
-}
-
-var whoCommand = {
-	func : function(message, user, scope){
-		if(currentSong === undefined){
-			user.channel.sendMessage('No song is currently being played. ' 	+
-						 'Use this command when a song is being played');
-			return;
-		}
-
-		var who = songdb.get(currentSong).value().who;
-		if(who === undefined) who = "unknown";
-		user.channel.sendMessage(`Requester for the current song: ${who}`);
-	},
-	help : `Gets who requested the currently playing song.`
-}
-
 var comeCommand = {
 	func : function(message, user, scope) {
 		user.channel.join();
 	},
 	help : "The bot comes into the same channel as you."
 }
+
 
 var infoCommand= {
 	func : function(message, user, scope) {
@@ -320,11 +305,35 @@ var infoCommand= {
 			return;
 		}
 
+		var sendMessage = function(songTitle, songLength, songUrl, songReq){
+				user.channel.sendMessage(`<br/>
+Title: ${songTitle}<br/>
+Length: ${songLength}<br/>
+URL: <a href="${songUrl}">${songUrl}</a><br/>
+Requester: ${songReq}<br/>`);
+		}
+
 		var msgString = ``;
-		var title = songdb.get(currentSong).value().title;
-		var who = songdb.get(currentSong).value().who;
+		var songObj = songdb.get(currentSong).value();
+
+		var title = songObj.title;
+		var who = songObj.who;
 		if(who === undefined) who = "unknown";
-		user.channel.sendMessage(`<br/>Title: ${title}<br/>Requester: ${who}<br/>`);
+			
+
+		const youtubePrefixString ="https://www.youtube.com/watch?v=";
+		const url = youtubePrefixString + currentSong;
+		var length = songObj.length;
+		if(length === undefined){
+			ytdl.getInfo(youtubePrefixString + currentSong, [], function(err, info){
+				if(err) throw err;
+				var songLen = info.length_seconds.toMMSS();
+				songdb.get(currentSong).assign({length: songLen}).write();
+				sendMessage(title, songLen, url, who);
+			});
+		} else {
+			sendMessage(title, length, url, who);
+		}
 	},
 	help: "Gets information about the current song"
 }
@@ -347,6 +356,7 @@ var commands = {
 	'come' : comeCommand,
 	'dl' : downloadVideo,
 	'vol' : volumeCommand,
+
 	'next' : nextSong,
 	'skip' : nextSong,
 	'n' : nextSong,
@@ -361,9 +371,9 @@ var commands = {
 	'restart' : replayPlayback,
 	'r' : replayPlayback,
 
-	'title' : titleCommand,
-	'who' : whoCommand,
 	'info' : infoCommand,
+	'i' : infoCommand,
+
 	'remove' : removeCommand
 };
 
@@ -396,7 +406,7 @@ commands['h'] = commands['help'] = {
 	help : `Displays the help dialog. Usage: ${settings.commandPrefix}h &lt;command&gt; or ${settings.commandPrefix}h`,
 	func : function(message, user, scope) {
 		if (message.length == 1) {
-			var retString = "";
+			var retString = "Displaying commands:<br/>";
 			for (key in commands) {
 				const helpString = commands[key].help;
 				retString = retString + `${settings.commandPrefix}${key} : ${helpString}<br/>`;

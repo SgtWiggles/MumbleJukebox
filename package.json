@@ -1,0 +1,25 @@
+{
+  "name": "botv2",
+  "version": "0.0.1",
+  "description": "Mumble bot",
+  "main": "bot.js",
+  "dependencies": {
+    "audio-converter": "^1.0.13",
+    "audio-decode": "^1.4.0",
+    "ffmpeg-static": "^2.3.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "jitterbuffer": "^0.1.14",
+    "lowdb": "^1.0.0",
+    "mumble": "^0.3.15",
+    "noodle.js": "^1.2.1",
+    "sanitize-html": "^1.18.4",
+    "youtube-dl": "^1.12.2",
+    "ytdl-core": "^0.21.1"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}

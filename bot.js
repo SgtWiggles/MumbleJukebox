@@ -233,6 +233,11 @@ var playPlayback = {
 var replayPlayback = {
 	names: ['replay', 'restart', 'r'],
 	func : function(message, user, scope) {
+		if (currentSong === undefined) {
+			user.channel.sendMessage('No song is currently being played. ' +
+															 'Use this command when a song is being played');
+			return;
+		}
 		playSong(currentSong);
 	},
 	help : "Replays the current song."

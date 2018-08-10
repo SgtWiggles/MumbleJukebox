@@ -1,6 +1,11 @@
 let fs = require('fs');
 let assert = require('assert');
 
+function mod(num, val) {
+	return (((num % val) + val) % val);
+}
+
+
 module.exports = {
 	Playlist : class { // TODO saving idx and stuff
 		constructor(file) {
@@ -14,11 +19,9 @@ module.exports = {
 			if (this.songs.length == 0)
 				this.songs.push(songId);
 
-			let songidx = this.songs.find(function(element) {
-				return element == songId;
-			});
+			var songidx = this.songs.indexOf(songId);
 
-			if (songidx !== undefined) {
+			if (songidx === undefined) {
 				this.songs.push(songId);
 				songidx = this.songs.length - 1;
 				this.idx += 1;
@@ -46,7 +49,13 @@ module.exports = {
 		}
 
 		current() {
-			return this.songs[(this.idx % this.songs.length)];
+			return this.songs[mod(this.idx ,this.songs.length)];
+		}
+
+		// Gets a song relative to the current playing song.
+		get(offset) {
+			const pos = mod(this.idx + offset , this.songs.length);
+			return this.songs[pos];
 		}
 
 		next() {
@@ -69,6 +78,7 @@ module.exports = {
 				song[i] = songs[idx];
 				songs[idx] = tmp;
 			}
+			this.insertPosition = this.idx + 1;
 		}
 
 		first() {
@@ -91,11 +101,13 @@ module.exports = {
 		}
 
 		loadFromFile() {
+			console.log('Loading playlist');
 			let obj = JSON.parse(fs.readFileSync(this.file));
 			this.songs = obj.songs;
 			this.idx = obj.idx;
 			this.insertPosition = obj.insertPosition;
 			this.file = obj.file;
+			console.log('Done loading playlist');
 		}
 
 		manipulate(func) {

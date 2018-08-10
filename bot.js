@@ -190,13 +190,13 @@ var downloadVideo = {
 					console.log('Finished fetching song: ' + id + ', title ' + info.title + ' |  Song len ' + songLen);
 
 					songdb.set(id, {title : info.title, file : filePath, who : user.name, length : songLen}).write();
-					playlist.manipulate((pl) => {pl.insertSong(id);});
+					playlist.manipulate(function(pl) {pl.insertSong(id);});
 				});
 			});
 		}
 		else {
 			console.log('Song already downloaded: ' + id);
-			playlist.manipulate((pl) => {pl.insertSong(id);});
+			playlist.manipulate(function(pl) {pl.insertSong(id);});
 		}
 	},
 	help : `Downloads and adds it onto the playlist. Usage: ${settings.commandPrefix}dl &lt;youtube url&gt;`
@@ -377,7 +377,35 @@ var removeCommand = {
 	help : "Removes the currently playing song from the playlist"
 }
 
-var commands = [comeCommand,downloadVideo,volumeCommand,nextSong,prevSong,pausePlayback,playPlayback,replayPlayback, infoCommand, removeCommand];
+var playlistCommand = {
+	names: ['playlist', 'pl'],
+	func : function(message, user, scope) {
+		var items = 5;
+		if(message.length > 1){
+			var tmp = parseInt(message[1]);	
+			if(!isNaN(tmp)){
+				items = tmp;
+			} else {
+				user.channel.sendMessage(`Second argument must be an integer. ${message[1]} is not an integer`);
+				return;	
+			}
+		}
+			
+		const youtubePrefixString = "https://www.youtube.com/watch?v=";
+		var msg = `<br/>`;
+		for(var i = -items; i <= items; ++i) {
+			var idx = playlist.get(i);
+			var url = youtubePrefixString + idx;
+			var songObj = songdb.get(idx).value();		
+			console.log('fetching ', idx, ' obj ', songObj);
+			msg = msg + `${i}) ${songObj.title}  -->  <a href="${url}">${url}</a>  <br/>\n`;
+		}	
+		user.channel.sendMessage(msg);
+	},
+	help : "Displays some of the previous and upcoming songs. If the second argument is a number, then it shows that many items."
+}
+
+var commands = [comeCommand,downloadVideo,volumeCommand,nextSong,prevSong,pausePlayback,playPlayback,replayPlayback, infoCommand, removeCommand, playlistCommand];
 
 console.log('Connecting');
 mumble.connect(settings.url, options, function(error, con) {

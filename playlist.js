@@ -16,21 +16,26 @@ module.exports = {
 		}
 
 		insertSong(songId) {
+			assert(songId !== null && songId !== undefined);
+
 			if (this.songs.length == 0)
 				this.songs.push(songId);
 
 			var songidx = this.songs.indexOf(songId);
 
-			if (songidx === undefined) {
+			if (songidx === -1) {
+				var delta = this.insertPosition - this.idx;
+				this.idx = mod(this.idx, this.songs.length);
+				this.insertPosition = this.idx + delta;
+
 				this.songs.push(songId);
-				songidx = this.songs.length - 1;
-				this.idx += 1;
-				this.insertPosition += 1;
+				songidx = (this.songs.length - 1);
 			}
 
 			if (songidx <= this.idx || songidx > this.insertPosition) {
-				let tmp = this.songs[this.insertPosition];
-				this.songs[this.insertPosition] = this.songs[songidx];
+				var insert = mod(this.insertPosition, this.songs.length);
+				let tmp = this.songs[insert];
+				this.songs[insert] = this.songs[songidx];
 				this.songs[songidx] = tmp;
 			}
 			this.insertPosition += 1;

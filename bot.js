@@ -120,7 +120,10 @@ var ffmpegCommand = function(cmd) {
 };
 
 var playSong = function(id) {
-	assert(id !== undefined);
+	if(id === undefined) {
+		return;
+	}
+
 	if (ffmpegStream !== null) {
 		audioStream.setGain(Number.EPSILON);
 		ffmpegCommand('SIGSTOP');
@@ -380,8 +383,8 @@ var removeCommand = {
 var playlistCommand = {
 	names: ['playlist', 'pl'],
 	func : function(message, user, scope) {
-		var items = 5;
 		const youtubePrefixString = "https://www.youtube.com/watch?v=";
+		var items = 5;
 		var msg = `<br/>`;
 		for(var i = -items; i <= items; ++i) {
 			var idx = playlist.get(i);

@@ -150,8 +150,8 @@ var playSong = function(id) {
 					})
 			.on('error',
 					function(err, stdout, stderr) {
-						console.log('ffmpeg stdout:\n' + stdout);
-						console.log('ffmpeg stderr:\n' + stderr);
+						if(!err.message.includes('signal'))
+							console.log(err);
 					})
 			.pipe(audioStream);
 };

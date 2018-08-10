@@ -72,11 +72,11 @@ module.exports = {
 		}
 
 		shuffle() {
-			for (var i = songs.length - 1; i >= 0; --i) {
+			for (var i = this.songs.length - 1; i >= 0; --i) {
 				var idx = Math.floor(Math.random() * i);
-				var tmp = songs[i];
-				song[i] = songs[idx];
-				songs[idx] = tmp;
+				var tmp = this.songs[i];
+				this.songs[i] = this.songs[idx];
+				this.songs[idx] = tmp;
 			}
 			this.insertPosition = this.idx + 1;
 		}

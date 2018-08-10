@@ -381,31 +381,30 @@ var playlistCommand = {
 	names: ['playlist', 'pl'],
 	func : function(message, user, scope) {
 		var items = 5;
-		if(message.length > 1){
-			var tmp = parseInt(message[1]);	
-			if(!isNaN(tmp)){
-				items = tmp;
-			} else {
-				user.channel.sendMessage(`Second argument must be an integer. ${message[1]} is not an integer`);
-				return;	
-			}
-		}
-			
 		const youtubePrefixString = "https://www.youtube.com/watch?v=";
 		var msg = `<br/>`;
 		for(var i = -items; i <= items; ++i) {
 			var idx = playlist.get(i);
 			var url = youtubePrefixString + idx;
 			var songObj = songdb.get(idx).value();		
-			console.log('fetching ', idx, ' obj ', songObj);
 			msg = msg + `${i}) ${songObj.title}  -->  <a href="${url}">${url}</a>  <br/>\n`;
 		}	
 		user.channel.sendMessage(msg);
 	},
-	help : "Displays some of the previous and upcoming songs. If the second argument is a number, then it shows that many items."
+	help : "Displays some of the previous and upcoming songs"
 }
 
-var commands = [comeCommand,downloadVideo,volumeCommand,nextSong,prevSong,pausePlayback,playPlayback,replayPlayback, infoCommand, removeCommand, playlistCommand];
+var shuffleCommand = {
+	names : ['shuffle'],
+	func : function(message, user, scope) {
+		playlist.manipulate((pl) => {
+			pl.shuffle();
+		});
+	},
+	help : "Shuffles the playlist."
+}
+
+var commands = [comeCommand,downloadVideo,volumeCommand,nextSong,prevSong,pausePlayback,playPlayback,replayPlayback, infoCommand, removeCommand, playlistCommand, shuffleCommand];
 
 console.log('Connecting');
 mumble.connect(settings.url, options, function(error, con) {

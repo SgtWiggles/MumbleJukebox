@@ -4,47 +4,59 @@
 // lowdb
 // fluent-ffmpeg
 
-console.log('Starting bot');
+var getLogPrefix = function() {
+	return '[' + new Date().toLocaleString() + ']';
+}
+
+var log = function() {
+	var args = Array.prototype.slice.call(arguments);
+	args.unshift(getLogPrefix() + ' ');
+	console.log.apply(console, args);
+}
+
+
+log('Starting bot');
 
 var mumble = require('mumble');
-console.log('Loaded Mumble');
+log('Loaded Mumble');
 
 var fs = require('fs');
-console.log('Loaded fs');
+log('Loaded fs');
 
 var sanitizeHtml = require('sanitize-html');
-console.log('Loaded sanitize-html');
+log('Loaded sanitize-html');
 
 var path = require('path');
-console.log('Loaded path');
+log('Loaded path');
 
 const lowdb = require('lowdb');
-console.log('Loaded lowdb');
+log('Loaded lowdb');
 
 const FileSync = require('lowdb/adapters/FileSync');
-console.log('Loaded FileSync');
+log('Loaded FileSync');
 
 const {exec} = require('child_process');
-console.log('Loaded child_process');
+log('Loaded child_process');
 
 const ytdl = require('ytdl-core');
-console.log('Loaded ytdl-core');
+log('Loaded ytdl-core');
 
 var ffmpeg = require('fluent-ffmpeg');
-console.log('Loaded fluent-ffmpeg');
+log('Loaded fluent-ffmpeg');
 
 const assert = require('assert');
-console.log('Loaded assert');
+log('Loaded assert');
 
 const Playlist = require('./playlist');
-console.log('Loaded playlist');
+log('Loaded playlist');
 
-console.log('Finished loading requires');
+log('Finished loading requires');
 
 const isWindows = (process.platform == 'win32');
 function getWindowsErrorString(command) {
 	return `Sorry, ${command} is not supported when the bot is hosted on Windows`;
 }
+
 String.prototype.toMMSS =
 		function() {
 	var sec_num = parseInt(this, 10);
@@ -95,7 +107,7 @@ var saveSettings = function() {
 		if (err) {
 			throw err;
 		}
-		console.log("Saving settings file to disk");
+		log("Saving settings file to disk");
 	});
 };
 
@@ -120,7 +132,8 @@ var ffmpegCommand = function(cmd) {
 };
 
 var playSong = function(id) {
-	if(id === undefined) {
+	if(id === undefined || id === null) {
+		log("Tried to play undefined or null id.");
 		return;
 	}
 
@@ -141,12 +154,12 @@ var playSong = function(id) {
 			])
 			.on('start',
 					function(commandLine) {
-						console.log('Started decoding audio: ', commandLine);
+						log('Decoding audio: ', commandLine);
 						currentSong = id;
 					})
 			.on('end',
 					function() {
-						console.log('Audio decoding finished');
+						log('Audio decoding finished');
 						// clang-format off
 						playSong(playlist.manipulate((pl) => {return pl.next();}));
 						//clang-format on
@@ -154,7 +167,7 @@ var playSong = function(id) {
 			.on('error',
 					function(err, stdout, stderr) {
 						if(!err.message.includes('signal'))
-							console.log(err);
+							log(err);
 					})
 			.pipe(audioStream);
 };
@@ -165,7 +178,7 @@ var downloadVideo = {
 		message.splice(0, 1);
 
 		if (!ytdl.validateURL(message[0])) {
-			console.log('Invalid url: "' + message[0] + '"');
+			log('Invalid url: "' + message[0] + '"');
 			return;
 		}
 
@@ -173,7 +186,7 @@ var downloadVideo = {
 		var id = ytdl.getURLVideoID(url)
 
 		if (!songdb.has(id).value()) {
-			console.log('db does not have ' + id);
+			log('db does not have ' + id);
 			ytdl.getInfo(url, [], function(err, info) {
 				if (err)
 					throw err;
@@ -183,14 +196,14 @@ var downloadVideo = {
 					throw 'Could not find an audio format to use!';
 
 				var filePath = './music/' + id + '.' + audioFormat.container;
-				console.log('Downloading to: ' + filePath);
+				log('Downloading to: ' + filePath);
 
 				var video = ytdl.downloadFromInfo(info, {format : audioFormat});
 				video.pipe(fs.createWriteStream(filePath));
 
 				video.on('end', () => {
 					var songLen = info.length_seconds.toMMSS()
-					console.log('Finished fetching song: ' + id + ', title ' + info.title + ' |  Song len ' + songLen);
+					log('Fetched song: ' + id + ', title ' + info.title + ' |  Song len ' + songLen);
 
 					songdb.set(id, {title : info.title, file : filePath, who : user.name, length : songLen}).write();
 					playlist.manipulate(function(pl) {pl.insertSong(id);});
@@ -198,7 +211,7 @@ var downloadVideo = {
 			});
 		}
 		else {
-			console.log('Song already downloaded: ' + id);
+			log('Song already downloaded: ' + id);
 			playlist.manipulate(function(pl) {pl.insertSong(id);});
 		}
 	},
@@ -286,7 +299,7 @@ var volumeCommand = {
 			user.channel.sendMessage("Current volume: " + (settings.volume * 100));
 			return;
 		}
-		console.log(message);
+		log(message);
 
 		var vol = parseFloat(message[1]);
 		if (vol < 0 || vol > 100 || isNaN(vol)) {
@@ -304,7 +317,7 @@ var volumeCommand = {
 		}
 		saveSettings();
 
-		console.log('Set volume to:', vol);
+		log('Set volume to:', vol);
 	},
 	help : `Sets the volume of the bot. Usage: ${settings.commandPrefix}vol [0,100]`
 }
@@ -369,7 +382,7 @@ var removeCommand = {
 															 'Use this command when a song is being played');
 			return;
 		}
-		console.log(`Attempting to remove ${currentSong}`);
+		log(`Attempting to remove ${currentSong}`);
 		var nextSong  = playlist.manipulate((pl)=>{
 			pl.removeSong(currentSong);
 			return pl.next();
@@ -409,14 +422,14 @@ var shuffleCommand = {
 
 var commands = [comeCommand,downloadVideo,volumeCommand,nextSong,prevSong,pausePlayback,playPlayback,replayPlayback, infoCommand, removeCommand, playlistCommand, shuffleCommand];
 
-console.log('Connecting');
+log('Connecting');
 mumble.connect(settings.url, options, function(error, con) {
 	if (error) {
 		throw new Error(error);
-		console.log('Connection failed');
+		log('Connection failed');
 	}
 
-	console.log('Connected');
+	log('Connected');
 
 	con.authenticate(settings.name);
 	con.on('initialized', onInit);
@@ -427,7 +440,7 @@ mumble.connect(settings.url, options, function(error, con) {
 });
 
 var onInit = function() {
-	console.log('Connection established');
+	log('Connection established');
 };
 
 var hasPrefix = function(string, prefix) {
@@ -476,8 +489,8 @@ const helpCommand = {
 commands.push(helpCommand);
 
 var onMessage = function(message, user, scope) {
-	console.log('----------------------onMessage----------------------');
-	console.log('Received message: "' + message + '"');
+	log('----------------------onMessage----------------------');
+	log('Received message: "' + message + '"');
 	message = sanitizeHtml(message, {allowedTags : [], allowedAttributes : []});
 	message = message.replace(/\s/g, ' ').replace(/\s\s+/g, ' ').trim();
 	var strings = message.split(' ');
@@ -498,15 +511,14 @@ var onMessage = function(message, user, scope) {
 			obj.func(strings, user, scope);
 		}
 	}
-	console.log('-----------------------------------------------------');
+	log('-----------------------------------------------------');
 };
 
 
 var onUserMove = function(user) {
-	console.log('User ' + user.name + ' moved or disconnected');
-	console.log('Current users: ' + mumbleClient.user.channel.users);
+	log('User ' + user.name + ' moved or disconnected');
 	if(mumbleClient.user.channel.users.length === 1) { //Only the bot in the channel.
-		console.log('Empty channel, stopping music');
+		log('Empty channel, stopping music');
 		ffmpegCommand('SIGSTOP');
 	}
 }

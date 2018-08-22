@@ -137,16 +137,16 @@ var playSong = function(id) {
 		return;
 	}
 
+	if(audioStream !== null){
+		audioStream.close();
+		audioStream = null;
+	}
 	if (ffmpegStream !== null) {
-		audioStream.setGain(Number.EPSILON);
-		ffmpegCommand('SIGSTOP');
 		ffmpegCommand('SIGKILL');
 	}
 
 	var file = (__dirname + '/' + songdb.get(id).value().file);
 	
-	if(audioStream !== null)
-		audioStream.close();
 
 	audioStream = mumbleClient.inputStream({sampleRate : songSampleRate, channels : 1, gain : settings.volume});
 	ffmpegStream = ffmpeg(fs.createReadStream(file));

@@ -37,7 +37,7 @@ log('Loaded fluent-ffmpeg');
 const assert = require('assert');
 log('Loaded assert');
 
-const Playlist = require('./playlist');
+const Playlist = require('./Playlist.js');
 log('Loaded playlist');
 
 const MusicPlayer = require('./MusicPlayer.js');

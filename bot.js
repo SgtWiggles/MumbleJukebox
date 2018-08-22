@@ -154,7 +154,7 @@ var playSong = function(id) {
 			])
 			.on('start',
 					function(commandLine) {
-						log('Decoding audio: ', commandLine);
+						log('Decoding ', id, ': ',commandLine);
 						currentSong = id;
 					})
 			.on('end',

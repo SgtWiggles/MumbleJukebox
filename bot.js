@@ -144,6 +144,10 @@ var playSong = function(id) {
 	}
 
 	var file = (__dirname + '/' + songdb.get(id).value().file);
+	
+	if(audioStream !== null)
+		audioStream.close();
+
 	audioStream = mumbleClient.inputStream({sampleRate : songSampleRate, channels : 1, gain : settings.volume});
 	ffmpegStream = ffmpeg(fs.createReadStream(file));
 

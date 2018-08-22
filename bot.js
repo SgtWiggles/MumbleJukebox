@@ -490,7 +490,7 @@ commands.push(helpCommand);
 
 var onMessage = function(message, user, scope) {
 	log('----------------------onMessage----------------------');
-	log('Received message: "' + message + '"');
+	log('Received message: "' + message + '"', " from user: ", user.name);
 	message = sanitizeHtml(message, {allowedTags : [], allowedAttributes : []});
 	message = message.replace(/\s/g, ' ').replace(/\s\s+/g, ' ').trim();
 	var strings = message.split(' ');

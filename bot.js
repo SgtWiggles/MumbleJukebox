@@ -4,17 +4,7 @@
 // lowdb
 // fluent-ffmpeg
 
-var getLogPrefix = function() {
-	return '[' + new Date().toLocaleString() + ']';
-}
-
-var log = function() {
-	var args = Array.prototype.slice.call(arguments);
-	args.unshift(getLogPrefix() + ' ');
-	console.log.apply(console, args);
-}
-
-
+const log = require('./Log.js');
 log('Starting bot');
 
 var mumble = require('mumble');
@@ -50,6 +40,9 @@ log('Loaded assert');
 const Playlist = require('./playlist');
 log('Loaded playlist');
 
+const MusicPlayer = require('./MusicPlayer.js');
+log('Loaded MusicPlayer')
+
 log('Finished loading requires');
 
 const isWindows = (process.platform == 'win32');
@@ -71,20 +64,12 @@ String.prototype.toMMSS =
 }
 
 var options = {};
-var audioStream = null;
-var ffmpegStream = null;
 
 var mumbleClient;
-
-const songSampleRate = 48000;
-const bufSize = 2;
-const maxRate = 1;
 
 const settingsFile = 'settings.json';
 const playlistFile = 'playlist.json';
 const databaseFile = 'db.json';
-
-var currentSong = undefined;
 
 const adapter = new FileSync(databaseFile);
 const songdb = lowdb(adapter);
@@ -100,7 +85,10 @@ if (!fs.existsSync(playlistFile)) {
 }
 playlist.loadFromFile();
 
+var musicPlayer = null;
+
 let settings = {url : 'some.server:9999', name : 'Mumble Bot', commandPrefix : '!', volume : 0.2};
+
 var saveSettings = function() {
 	let settingsStr = JSON.stringify(settings, undefined, 2);
 	fs.writeFileSync(settingsFile, settingsStr, function(err) {
@@ -122,62 +110,19 @@ if (fs.existsSync(settingsFile)) {
 	saveSettings();
 }
 
-var ffmpegCommand = function(cmd) {
-	if (ffmpegStream !== null && ffmpegStream !== undefined) {
-		ffmpegStream.kill(cmd);
-		if (cmd === 'SIGKILL') {
-			ffmpegStream = null;
-		}
-	}
-};
-
 var playSong = function(id) {
-	if(id === undefined || id === null) {
-		log("Tried to play undefined or null id.");
-		return;
-	}
-
-	if(audioStream !== null){
-		audioStream.close();
-		audioStream = null;
-	}
-	if (ffmpegStream !== null) {
-		ffmpegCommand('SIGKILL');
-	}
-
 	var file = (__dirname + '/' + songdb.get(id).value().file);
-	
-
-	audioStream = mumbleClient.inputStream({sampleRate : songSampleRate, channels : 1, gain : settings.volume});
-	ffmpegStream = ffmpeg(fs.createReadStream(file));
-
-	ffmpegStream
-			.addOutputOptions([
-				'-f s16le', '-acodec pcm_s16le', '-ac 1', '-ar ' + songSampleRate, '-bufsize ' + bufSize + 'M',
-				'-maxrate ' + maxRate + 'M'
-			])
-			.on('start',
-					function(commandLine) {
-						log('Decoding ', id, ': ',commandLine);
-						currentSong = id;
-					})
-			.on('end',
-					function() {
-						log('Audio decoding finished');
-						// clang-format off
-						playSong(playlist.manipulate((pl) => {return pl.next();}));
-						//clang-format on
-					})
-			.on('error',
-					function(err, stdout, stderr) {
-						if(!err.message.includes('signal'))
-							log(err);
-					})
-			.pipe(audioStream);
+	// clang-format off
+	musicPlayer.play(file, (player) => {
+		playSong(playlist.manipulate((pl) => {
+			return pl.next();
+		}))
+	});
+	// clang-format on
 };
 
 var downloadVideo = {
-	names : ['dl', 'download'],
+	names : [ 'dl', 'download' ],
 	func : function(message, user, scope) {
 		message.splice(0, 1);
 
@@ -210,85 +155,95 @@ var downloadVideo = {
 					log('Fetched song: ' + id + ', title ' + info.title + ' |  Song len ' + songLen);
 
 					songdb.set(id, {title : info.title, file : filePath, who : user.name, length : songLen}).write();
-					playlist.manipulate(function(pl) {pl.insertSong(id);});
+					playlist.manipulate(function(pl) {
+						pl.insertSong(id);
+					});
 				});
 			});
 		}
 		else {
 			log('Song already downloaded: ' + id);
-			playlist.manipulate(function(pl) {pl.insertSong(id);});
+			playlist.manipulate(function(pl) {
+				pl.insertSong(id);
+			});
 		}
 	},
 	help : `Downloads and adds it onto the playlist. Usage: ${settings.commandPrefix}dl &lt;youtube url&gt;`
 };
 
 var pausePlayback = {
-	names: ['pause','stop', 's'],
+	names : [ 'pause', 'stop', 's' ],
 	func : function(message, user, scope) {
 		if (isWindows) {
 			user.channel.sendMessage(getWindowsErrorString(message[0]));
 			return;
 		}
-		ffmpegCommand('SIGSTOP');
+		musicPlayer.pause();
 	},
 	help : "Pauses the music playback."
 };
 
 var playPlayback = {
-	names: ['play', 'p'],
+	names : [ 'play', 'p' ],
 	func : function(message, user, scope) {
 		if (isWindows) {
 			user.channel.sendMessage(getWindowsErrorString(message[0]));
 			return;
 		}
-		if (ffmpegStream === null) {
-			playSong(playlist.manipulate((pl) => { return pl.next();}));
-		} else {
-			ffmpegCommand('SIGCONT');
+		if (musicPlayer.isPaused()) {
+			musicPlayer.resume();
+		} else if (!musicPlayer.isPlaying()) {
+			playSong(playlist.manipulate((pl) => {
+				return pl.next();
+			}));
 		}
 	},
 	help : "The bot resumes playing music."
 };
 
 var replayPlayback = {
-	names: ['replay', 'restart', 'r'],
+	names : [ 'replay', 'restart', 'r' ],
 	func : function(message, user, scope) {
-		if (currentSong === undefined) {
+		if (musicPlayer.isPaused()) {
 			user.channel.sendMessage('No song is currently being played. ' +
 															 'Use this command when a song is being played');
 			return;
 		}
-		playSong(currentSong);
+		playSong(playlist.current());
 	},
 	help : "Replays the current song."
 };
 
 var nextSong = {
-	names: ['next', 'n'],
+	names : [ 'next', 'n' ],
 	func : function(message, user, scope) {
 		if (isWindows) {
 			user.channel.sendMessage("Command not supported when bot is hosted on Windows")
 			return;
 		}
-		playSong(playlist.manipulate((pl) => {return pl.next();}));
+		playSong(playlist.manipulate((pl) => {
+			return pl.next();
+		}));
 	},
 	help : "Skips the current song and plays the next song."
 };
 
 var prevSong = {
-	names: ['previous', 'prev', 'back', 'b'],
-	func: function(message,user, scope){
+	names : [ 'previous', 'prev', 'back', 'b' ],
+	func : function(message, user, scope) {
 		if (isWindows) {
 			user.channel.sendMessage("Command not supported when bot is hosted on Windows")
 			return;
 		}
-		playSong(playlist.manipulate((pl) => {return pl.previous();}));
+		playSong(playlist.manipulate((pl) => {
+			return pl.previous();
+		}));
 	},
-	help: "Plays the previously played song."
+	help : "Plays the previously played song."
 }
 
 var quitCommand = {
-	names: ['quit'],
+	names : [ 'quit' ],
 	func : function(message, user, scope) {
 		saveSettings();
 		process.exit();
@@ -297,13 +252,12 @@ var quitCommand = {
 };
 
 var volumeCommand = {
-	names: ['volume', 'vol', 'v'],
+	names : [ 'volume', 'vol', 'v' ],
 	func : function(message, user, scope) {
 		if (message.length <= 1) {
 			user.channel.sendMessage("Current volume: " + (settings.volume * 100));
 			return;
 		}
-		log(message);
 
 		var vol = parseFloat(message[1]);
 		if (vol < 0 || vol > 100 || isNaN(vol)) {
@@ -312,22 +266,17 @@ var volumeCommand = {
 		}
 
 		vol = vol / 100;
-		if (vol == 0)
-			vol = Number.EPSILON;
 
 		settings.volume = vol;
-		if (audioStream !== null) {
-			audioStream.setGain(settings.volume);
-		}
-		saveSettings();
+		musicPlayer.setVolume(vol);
 
-		log('Set volume to:', vol);
+		saveSettings();
 	},
 	help : `Sets the volume of the bot. Usage: ${settings.commandPrefix}vol [0,100]`
 }
 
 var comeCommand = {
-	names: ['come'],
+	names : [ 'come' ],
 	func : function(message, user, scope) {
 		user.channel.join();
 	},
@@ -335,14 +284,8 @@ var comeCommand = {
 }
 
 var infoCommand = {
-	names:  ['info', 'i'],
+	names : [ 'info', 'i' ],
 	func : function(message, user, scope) {
-		if (currentSong === undefined) {
-			user.channel.sendMessage('No song is currently being played. ' +
-															 'Use this command when a song is being played');
-			return;
-		}
-
 		var sendMessage =
 				function(songTitle, songLength, songUrl, songReq) {
 			user.channel.sendMessage(`<br/>
@@ -352,8 +295,9 @@ URL: <a href="${songUrl}">${songUrl}</a><br/>
 Requester: ${songReq}<br/>`);
 		}
 
+		const curSong = playlist.current();
 		var msgString = ``;
-		var songObj = songdb.get(currentSong).value();
+		var songObj = songdb.get(curSong).value();
 
 		var title = songObj.title;
 		var who = songObj.who;
@@ -361,14 +305,14 @@ Requester: ${songReq}<br/>`);
 			who = "unknown";
 
 		const youtubePrefixString = "https://www.youtube.com/watch?v=";
-		const url = youtubePrefixString + currentSong;
+		const url = youtubePrefixString + curSong
 		var length = songObj.length;
 		if (length === undefined) {
-			ytdl.getInfo(youtubePrefixString + currentSong, [], function(err, info) {
+			ytdl.getInfo(youtubePrefixString + curSong, [], function(err, info) {
 				if (err)
 					throw err;
 				var songLen = info.length_seconds.toMMSS();
-				songdb.get(currentSong).assign({length : songLen}).write();
+				songdb.get(curSong).assign({length : songLen}).write();
 				sendMessage(title, songLen, url, who);
 			});
 		} else {
@@ -379,43 +323,45 @@ Requester: ${songReq}<br/>`);
 }
 
 var removeCommand = {
-	names : ['remove'],
+	names : [ 'remove' ],
 	func : function(message, user, scope) {
-		if (currentSong === undefined) {
+		if (!musicPlayer.isPlaying()) {
 			user.channel.sendMessage('No song is currently being played. ' +
 															 'Use this command when a song is being played');
 			return;
 		}
-		log(`Attempting to remove ${currentSong}`);
-		var nextSong  = playlist.manipulate((pl)=>{
-			pl.removeSong(currentSong);
+
+		const curSong = playlist.current();
+		log(`Attempting to remove ${curSong}`);
+		const nextSong = playlist.manipulate((pl) => {
+			pl.removeSong(curSong);
 			return pl.next();
 		});
-		songdb.unset(currentSong).write();
+		songdb.unset(curSong).write();
 		playSong(nextSong);
 	},
 	help : "Removes the currently playing song from the playlist"
 }
 
 var playlistCommand = {
-	names: ['playlist', 'pl'],
+	names : [ 'playlist', 'pl' ],
 	func : function(message, user, scope) {
 		const youtubePrefixString = "https://www.youtube.com/watch?v=";
 		var items = 5;
 		var msg = `<br/>`;
-		for(var i = -items; i <= items; ++i) {
+		for (var i = -items; i <= items; ++i) {
 			var idx = playlist.get(i);
 			var url = youtubePrefixString + idx;
-			var songObj = songdb.get(idx).value();		
+			var songObj = songdb.get(idx).value();
 			msg = msg + `${i}) ${songObj.title}  -->  <a href="${url}">${url}</a>  <br/>\n`;
-		}	
+		}
 		user.channel.sendMessage(msg);
 	},
 	help : "Displays some of the previous and upcoming songs"
 }
 
 var shuffleCommand = {
-	names : ['shuffle'],
+	names : [ 'shuffle' ],
 	func : function(message, user, scope) {
 		playlist.manipulate((pl) => {
 			pl.shuffle();
@@ -424,7 +370,10 @@ var shuffleCommand = {
 	help : "Shuffles the playlist."
 }
 
-var commands = [comeCommand,downloadVideo,volumeCommand,nextSong,prevSong,pausePlayback,playPlayback,replayPlayback, infoCommand, removeCommand, playlistCommand, shuffleCommand];
+var commands = [
+	comeCommand, downloadVideo, volumeCommand, nextSong, prevSong, pausePlayback, playPlayback, replayPlayback,
+	infoCommand, removeCommand, playlistCommand, shuffleCommand
+];
 
 log('Connecting');
 mumble.connect(settings.url, options, function(error, con) {
@@ -438,8 +387,9 @@ mumble.connect(settings.url, options, function(error, con) {
 	con.authenticate(settings.name);
 	con.on('initialized', onInit);
 	con.on('message', onMessage);
-	con.on( 'user-move', onUserMove);
-	con.on( 'user-disconnect', onUserMove);
+	con.on('user-move', onUserMove);
+	con.on('user-disconnect', onUserMove);
+	musicPlayer = new MusicPlayer.MusicPlayer(con);
 	mumbleClient = con;
 });
 
@@ -454,17 +404,17 @@ var hasPrefix = function(string, prefix) {
 };
 
 const helpCommand = {
-	names: ['h','help'],
+	names : [ 'h', 'help' ],
 	help : `Displays the help dialog. Usage: ${settings.commandPrefix}h &lt;command&gt; or ${settings.commandPrefix}h`,
 	func : function(message, user, scope) {
-		const buildCommandList = (list)=>{
+		const buildCommandList = (list) => {
 			let retString = '';
 			let spacer = ', ';
-			for(var k in list){
+			for (var k in list) {
 				const name = list[k];
 				retString = retString + `${settings.commandPrefix}${name}` + spacer;
 			}
-			if(retString.length > spacer.length)
+			if (retString.length > spacer.length)
 				retString = retString.substr(0, retString.length - spacer.length);
 			return retString;
 		};
@@ -478,8 +428,10 @@ const helpCommand = {
 			}
 			user.channel.sendMessage(retString);
 		} else if (message.length == 2) {
-			const obj = commands.find((elem)=>{
-				return elem.names.find((inner)=>{return inner === message[1];}) !== undefined;
+			const obj = commands.find((elem) => {
+				return elem.names.find((inner) => {
+					return inner === message[1];
+				}) !== undefined;
 			});
 			if (obj === undefined) {
 				user.channel.sendMessage(`'${message[1]}' is not a valid command`);
@@ -504,25 +456,28 @@ var onMessage = function(message, user, scope) {
 
 	if (hasPrefix(strings[0], settings.commandPrefix)) {
 		strings[0] = strings[0].substr(settings.commandPrefix.length);
-		process.stdout.write('Command string: "' + strings[0] + '" -> ');
-		const obj = commands.find((elem)=>{
-			return (elem.names.find((inner)=>{return inner === strings[0];}) !== undefined);
+		const obj = commands.find((elem) => {
+			return (elem.names.find((inner) => {
+				return inner === strings[0];
+			}) !== undefined);
 		});
 		if (obj === undefined) {
-			process.stdout.write('Not found!\n');
+			log('Command string: "' + strings[0] + ' -> Not found!');
 		} else {
-			process.stdout.write(`Found! \n`);
+			log('Command string: "' + strings[0] + ' -> Found!');
 			obj.func(strings, user, scope);
 		}
 	}
 	log('-----------------------------------------------------');
 };
 
-
 var onUserMove = function(user) {
 	log('User ' + user.name + ' moved or disconnected');
-	if(mumbleClient.user.channel.users.length === 1) { //Only the bot in the channel.
-		log('Empty channel, stopping music');
-		ffmpegCommand('SIGSTOP');
+	// Only the bot in the channel.
+	if (mumbleClient.user.channel.users.length === 1) {
+		if (musicPlayer.isPlaying() && !musicPlayer.isPaused()) {
+			log('Empty channel, stopping music');
+			musicPlayer.pause();
+		}
 	}
 }

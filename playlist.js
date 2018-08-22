@@ -5,7 +5,6 @@ function mod(num, val) {
 	return (((num % val) + val) % val);
 }
 
-
 module.exports = {
 	Playlist : class { // TODO saving idx and stuff
 		constructor(file) {
@@ -54,12 +53,12 @@ module.exports = {
 		}
 
 		current() {
-			return this.songs[mod(this.idx ,this.songs.length)];
+			return this.songs[mod(this.idx, this.songs.length)];
 		}
 
 		// Gets a song relative to the current playing song.
 		get(offset) {
-			const pos = mod(this.idx + offset , this.songs.length);
+			const pos = mod(this.idx + offset, this.songs.length);
 			return this.songs[pos];
 		}
 
